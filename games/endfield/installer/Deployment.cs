@@ -33,10 +33,11 @@ namespace GameRenderLab.Endfield
             string game = EndfieldLocation.Verify(requestedDirectory);
             RequireGameClosed();
             string machineRoot = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-            string store = Path.Combine(machineRoot, "GameRenderLabData", FileSafety.HashText(game.ToUpperInvariant()).Substring(0, 24));
+            string root = Path.Combine(machineRoot, "GameRenderLabData");
+            string store = Path.Combine(root, FileSafety.HashText(game.ToUpperInvariant()).Substring(0, 24));
             FileSafety.RejectReparsePoints(store);
             Directory.CreateDirectory(store);
-            string lockPath = Path.Combine(store, "operation.lock");
+            string lockPath = Path.Combine(root, "operation.lock");
             FileSafety.RejectReparsePoints(lockPath);
             using (new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
             {
@@ -57,6 +58,7 @@ namespace GameRenderLab.Endfield
             progress.Report("正在检查 RTX 50、驱动和现有 Vulkan 安装…");
             CheckGpu();
             CheckLegacyProxies(game);
+            CheckExistingAddonSettings(game);
             string executable = Path.Combine(game, "Endfield.exe");
             bool allowlisted = ReShadeLayer.IsAllowed(executable);
             bool layerReady = ReShadeLayer.CheckCompatible();
@@ -77,7 +79,7 @@ namespace GameRenderLab.Endfield
                 StageCandidate(stage, "renodx-mfgunlock.addon64", BuildPayload.MfgHash);
                 progress.Report("组件校验通过。正在备份游戏目录中即将更新的文件…");
                 RequireGameClosed();
-                InstallJournal journal = InstallJournal.Begin(store, game, !allowlisted);
+                InstallJournal journal = InstallJournal.Begin(store, game, !allowlisted, stage);
                 try
                 {
                     if (!layerReady)
@@ -170,6 +172,21 @@ namespace GameRenderLab.Endfield
                 throw new IOException("发现未知版本的 Bridge。请先用其原安装器卸载。");
         }
 
+        private static void CheckExistingAddonSettings(string game)
+        {
+            string path = FileSafety.Under(game, "ReShade.ini");
+            if (!File.Exists(path)) return;
+            var ini = new IniText(File.ReadAllText(path));
+            string customPath = ini.Value("ADDON", "AddonPath");
+            if (!String.IsNullOrWhiteSpace(customPath) &&
+                !String.Equals(Path.GetFullPath(Path.Combine(game, customPath)).TrimEnd('\\', '/'), game, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("现有 ReShade 指向自定义加载项目录。请先通过 ReShade 设置恢复此游戏的默认加载项目录。");
+            string disabled = ini.Value("ADDON", "DisabledAddons") ?? "";
+            foreach (string name in new[] { "DLSS 5 Neural Rendering", "MFG Unlock", "renodx-dlss5.addon64", "renodx-mfgunlock.addon64" })
+                if (disabled.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
+                    throw new IOException("现有 ReShade 配置禁用了 DLSS 5 组件。请在 ReShade 的加载项设置中恢复。");
+        }
+
         private static string PrepareDownload(string cache, string filename, string resource, string url, string hash)
         {
             string path = FileSafety.Under(cache, filename);
@@ -180,7 +197,7 @@ namespace GameRenderLab.Endfield
                 if (!CopyEmbedded(resource, temporary))
                 {
                     ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
-                    using (var client = new WebClient())
+                    using (var client = new DownloadClient())
                     {
                         client.Headers[HttpRequestHeader.UserAgent] = "GameRenderLab-EndfieldInstaller";
                         client.DownloadFile(new Uri(url), temporary);
@@ -246,6 +263,18 @@ namespace GameRenderLab.Endfield
             }) ini.SetIfMissing("RenoDX.DLSS5", entry.Key, entry.Value);
             ini.SetIfMissing("RenoDX.MFGUnlock", "Enabled", "0");
             return ini.ToString();
+        }
+
+        private sealed class DownloadClient : WebClient
+        {
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                var request = base.GetWebRequest(address);
+                request.Timeout = 120000;
+                var http = request as HttpWebRequest;
+                if (http != null) http.ReadWriteTimeout = 120000;
+                return request;
+            }
         }
     }
 

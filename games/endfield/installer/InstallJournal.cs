@@ -27,7 +27,7 @@ namespace GameRenderLab.Endfield
         private static string Pointer(string store) { return FileSafety.Under(store, "active.txt"); }
         internal static bool Exists(string store) { return File.Exists(Pointer(store)); }
 
-        internal static InstallJournal Begin(string store, string game, bool addedWhitelist)
+        internal static InstallJournal Begin(string store, string game, bool addedWhitelist, string stage = null)
         {
             if (Exists(store)) throw new IOException("另一个安装事务尚未回滚。");
             string name = "backup-" + Guid.NewGuid().ToString("N");
@@ -48,6 +48,13 @@ namespace GameRenderLab.Endfield
             FileSafety.AtomicWrite(FileSafety.Under(location, "game.txt"), Encoding.UTF8.GetBytes(game));
             FileSafety.AtomicWrite(FileSafety.Under(location, "whitelist.txt"), Encoding.ASCII.GetBytes(addedWhitelist ? "1" : "0"));
             WriteManifest(FileSafety.Under(location, "before.tsv"), backup);
+            if (stage != null)
+            {
+                var planned = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (string relative in Deployment.ManagedFiles)
+                    planned.Add(relative, GetFileDigest(FileSafety.Under(stage, relative)));
+                WriteManifest(FileSafety.Under(location, "planned.tsv"), planned);
+            }
             FileSafety.AtomicWrite(Pointer(store), Encoding.ASCII.GetBytes(name));
             return new InstallJournal(store, game, location, addedWhitelist, backup);
         }
@@ -80,7 +87,8 @@ namespace GameRenderLab.Endfield
         {
             if (requireClosed) Deployment.RequireGameClosed();
             string committed = FileSafety.Under(Location, "after.tsv");
-            var installed = File.Exists(committed) ? ReadManifest(committed) : null;
+            string planned = FileSafety.Under(Location, "planned.tsv");
+            var installed = File.Exists(committed) ? ReadManifest(committed) : File.Exists(planned) ? ReadManifest(planned) : null;
             // Validate every backup and check for other changes before touching any game file.
             foreach (string relative in Deployment.ManagedFiles)
             {

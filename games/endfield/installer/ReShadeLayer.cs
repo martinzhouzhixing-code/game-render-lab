@@ -14,6 +14,8 @@ namespace GameRenderLab.Endfield
     {
         private const string DllHash = "0cee63f9c9f13f3ac909c5b4903f4dbb4b719a7ab3b4f13b0deaf83c814b94f7";
         private const string JsonHash = "aa21713718843e531da396e2bfc80772c9cb3c369d6c30b836be6b0ae812d503";
+        private const string Dll32Hash = "da430e0a9c6eecefa0d1b27d05e16c426fb5d04e808b194d914eaac4b31bc0f8";
+        private const string Json32Hash = "dbfdbadb8c64b398b2f8bf30469841ab8c35e10c9da40ba69b966559d5fa15f6";
         private const string RegistryPath = @"SOFTWARE\Khronos\Vulkan\ImplicitLayers";
         private static readonly string DirectoryPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ReShade");
         private static string AppsPath { get { return FileSafety.Under(DirectoryPath, "ReShadeApps.ini"); } }
@@ -41,6 +43,15 @@ namespace GameRenderLab.Endfield
                 File.Exists(manifest) && !FileSafety.HashMatches(manifest, JsonHash))
                 throw new IOException("系统已有其他版本的共享 ReShade。为保护其他游戏，安装未继续。");
             bool complete = FileSafety.HashMatches(module, DllHash) && FileSafety.HashMatches(manifest, JsonHash);
+            if (!complete || !registered)
+            {
+                string module32 = FileSafety.Under(DirectoryPath, "ReShade32.dll");
+                string manifest32 = FileSafety.Under(DirectoryPath, "ReShade32.json");
+                if (File.Exists(module32) && !FileSafety.HashMatches(module32, Dll32Hash) ||
+                    File.Exists(manifest32) && !FileSafety.HashMatches(manifest32, Json32Hash))
+                    throw new IOException("系统已有其他版本的 32 位共享 ReShade。为保护其他游戏，安装未继续。");
+                CheckExistingLegacyLayers(manifest32);
+            }
             if (!complete && File.Exists(AppsPath))
             {
                 var existing = new IniText(File.ReadAllText(AppsPath));
@@ -48,6 +59,30 @@ namespace GameRenderLab.Endfield
                     throw new IOException("共享 ReShade 的安装不完整，但仍有已注册的游戏。请先通过官方安装器修复。");
             }
             return complete && registered;
+        }
+
+        private static void CheckExistingLegacyLayers(string expected32Manifest)
+        {
+            string legacy = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReShade");
+            if (File.Exists(Path.Combine(legacy, "ReShadeApps.ini")))
+                throw new IOException("发现旧的用户级 ReShade 应用配置。请先通过其官方安装器迁移，避免影响其他游戏。");
+            string legacyPrefix = Path.GetFullPath(legacy).TrimEnd('\\') + "\\";
+            foreach (RegistryHive scope in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
+                foreach (RegistryView view in new[] { RegistryView.Registry32, RegistryView.Registry64 })
+                    using (var hive = RegistryKey.OpenBaseKey(scope, view))
+                        foreach (string registry in new[] { RegistryPath, @"SOFTWARE\Khronos\Vulkan\ExplicitLayers" })
+                            using (var key = hive.OpenSubKey(registry))
+                            {
+                                if (key == null) continue;
+                                foreach (string entry in key.GetValueNames())
+                                {
+                                    if (entry.StartsWith(legacyPrefix, StringComparison.OrdinalIgnoreCase))
+                                        throw new IOException("发现旧的用户级 ReShade Vulkan 注册。请先通过其官方安装器迁移。");
+                                    if (String.Equals(Path.GetFileName(entry), "ReShade32.json", StringComparison.OrdinalIgnoreCase) &&
+                                        (!String.Equals(entry, expected32Manifest, StringComparison.OrdinalIgnoreCase) || !Object.Equals(key.GetValue(entry), 0)))
+                                        throw new IOException("发现不同的 32 位 ReShade Vulkan 注册。为保护其他游戏，安装未继续。");
+                                }
+                            }
         }
 
         internal static void Install(string setup, string executable)

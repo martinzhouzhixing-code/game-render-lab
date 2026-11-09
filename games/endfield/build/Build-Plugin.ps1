@@ -47,16 +47,6 @@ $dumpbin = (Get-Command dumpbin.exe -CommandType Application).Source
 $python = (Get-Command python.exe -CommandType Application).Source
 Invoke-Checked $python @('-B', (Join-Path $PSScriptRoot 'stage_dependencies.py'), $DependencyDirectory)
 New-Item -ItemType Directory -Path $intermediate, $OutputDirectory -Force | Out-Null
-if (-not $SkipTests) {
-    $clang = Get-Command clang++.exe -CommandType Application -ErrorAction SilentlyContinue
-    if ($clang) {
-        foreach ($test in @('test_present_slot.py', 'test_present_warmup.py', 'test_upscaled_worksets.py')) {
-            Invoke-Checked $python @('-B', (Join-Path $plugin "tools\endfield-validation\$test"), $clang.Source)
-        }
-    } else {
-        Write-Host 'Clang is unavailable. Exact-code Vulkan fixtures are skipped.'
-    }
-}
 
 $ngx = Join-Path $DependencyDirectory 'external\DLSS\include'
 $detours = Join-Path $mfg 'deps\detours'

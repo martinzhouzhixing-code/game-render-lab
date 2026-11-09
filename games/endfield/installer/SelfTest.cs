@@ -11,7 +11,7 @@ namespace GameRenderLab.Endfield
             if (!condition) throw new Exception("FAIL " + name);
         }
 
-        internal static int Run(string report)
+        internal static int Run(string report, string runtimeArchive)
         {
             string temporary = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(report)), "fixture-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temporary);
@@ -57,7 +57,13 @@ namespace GameRenderLab.Endfield
                 Check(!InstallJournal.Exists(store), "transaction pointer cleared");
                 Deployment.StageCandidate(temporary, "renodx-dlss5.addon64", BuildPayload.GenericHash);
                 Deployment.StageCandidate(temporary, "renodx-mfgunlock.addon64", BuildPayload.MfgHash);
-                File.WriteAllText(report, "PASS Chinese defaults; driver version; allowlist; path traversal; fake game rejection; safe rollback; embedded x64 add-ons.");
+                if (runtimeArchive != null)
+                {
+                    Check(FileSafety.HashMatches(runtimeArchive, Deployment.RuntimeHash), "runtime archive pin");
+                    Deployment.StageRelease(runtimeArchive, temporary);
+                }
+                File.WriteAllText(report, "PASS Chinese defaults; driver version; allowlist; path traversal; fake game rejection; safe rollback; embedded x64 add-ons." +
+                    (runtimeArchive == null ? "" : " Pinned upstream ZIP and NVIDIA runtime signature validated."));
                 return 0;
             }
             catch (Exception error) { File.WriteAllText(report, error.ToString()); return 1; }

@@ -16,8 +16,8 @@ namespace GameRenderLab.Endfield
         [STAThread]
         private static int Main(string[] args)
         {
-            if (args.Length == 2 && args[0] == "--self-test")
-                return SelfTest.Run(args[1]);
+            if ((args.Length == 2 || args.Length == 3) && args[0] == "--self-test")
+                return SelfTest.Run(args[1], args.Length == 3 ? args[2] : null);
             if (args.Length == 2 && args[0] == "--find")
             {
                 try { File.WriteAllLines(args[1], EndfieldLocation.Find()); return 0; }
@@ -51,6 +51,7 @@ namespace GameRenderLab.Endfield
         private readonly string operation;
         private readonly string operationDirectory;
         private bool busy;
+        private bool applying;
 
         internal InstallerWindow(string operation, string directory)
         {
@@ -97,7 +98,7 @@ namespace GameRenderLab.Endfield
             status.Padding = new Padding(3, 6, 3, 0);
             status.Text = "正在查找已安装的《终末地》…";
             panel.Controls.Add(status, 0, 5);
-            panel.Controls.Add(new Label { Text = "适用首版验证范围 RTX 50。首次安装需联网下载官方来源组件。", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(174, 185, 201) }, 0, 6);
+            panel.Controls.Add(new Label { Text = "适用首版验证范围 RTX 50。首次安装可能需联网下载固定来源组件。", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(174, 185, 201) }, 0, 6);
             Shown += delegate
             {
                 if (this.operation == null) FindLocations();
@@ -110,7 +111,7 @@ namespace GameRenderLab.Endfield
             };
             FormClosing += delegate(object sender, FormClosingEventArgs e)
             {
-                if (busy && this.operation != null)
+                if (applying)
                 {
                     e.Cancel = true;
                     status.Text = "安装或回滚正在进行，请等待当前操作结束。";
@@ -194,6 +195,7 @@ namespace GameRenderLab.Endfield
         private async void RunOperation(string mode, string directory)
         {
             if (!Program.IsAdministrator()) { status.Text = "安装与回滚需要 Windows 管理员权限。"; return; }
+            applying = true;
             busy = true;
             RefreshButtons();
             var report = new Progress<string>(message => status.Text = message);
@@ -209,7 +211,7 @@ namespace GameRenderLab.Endfield
                 status.Text = error.Message;
                 MessageBox.Show(this, error.Message, "安装器状态", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
-            finally { busy = false; RefreshButtons(); }
+            finally { applying = false; busy = false; RefreshButtons(); }
         }
     }
 }
