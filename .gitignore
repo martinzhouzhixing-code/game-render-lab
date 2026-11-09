@@ -1,0 +1,11 @@
+/dist/
+/.build/
+**/bin/
+**/obj/
+**/__pycache__/
+*.addon64
+*.exe
+*.dll
+*.zip
+*.log
+*.pdb

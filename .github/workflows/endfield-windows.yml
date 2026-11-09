@@ -1,0 +1,71 @@
+name: Endfield Windows x64
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "games/endfield/**"
+      - ".github/workflows/endfield-windows.yml"
+  pull_request:
+    paths:
+      - "games/endfield/**"
+      - ".github/workflows/endfield-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Validate Endfield source
+        shell: pwsh
+        run: |
+          $plugin = 'games/endfield/plugin'
+          python -B -m unittest discover -s "$plugin/tools/endfield-validation" -p test_validate.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -B "$plugin/tools/unified-20261011/check-lang-strings.py"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build and verify the Chinese UI add-ons
+        shell: pwsh
+        run: ./games/endfield/build/Build-Plugin.ps1
+
+      - name: Build the one-click Windows installer
+        shell: pwsh
+        run: |
+          ./games/endfield/installer/Build-Installer.ps1 `
+            -CandidateDirectory (Resolve-Path 'dist/endfield-candidate').Path `
+            -OutputPath (Join-Path (Resolve-Path 'dist').Path 'Endfield-DLSS5-Setup.exe')
+
+      - name: Run the installer self-test
+        shell: pwsh
+        run: |
+          $file = Get-Item -LiteralPath 'dist/Endfield-DLSS5-Setup.exe'
+          $report = Join-Path $env:RUNNER_TEMP 'endfield-self-test.txt'
+          $test = Start-Process -FilePath $file.FullName `
+            -ArgumentList ('--self-test "' + $report + '"') -Wait -PassThru
+          Get-Content -LiteralPath $report
+          if ($test.ExitCode -ne 0) { throw "Installer self-test failed with exit $($test.ExitCode)." }
+          (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant() +
+            '  ' + $file.Name | Set-Content -LiteralPath 'dist/Endfield-DLSS5-Setup.sha256' -Encoding ascii
+
+      - name: Upload verified Windows build
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Endfield-DLSS5-Windows-x64
+          path: |
+            dist/Endfield-DLSS5-Setup.exe
+            dist/Endfield-DLSS5-Setup.sha256
+            dist/endfield-candidate/candidate-manifest.json
+            dist/endfield-candidate/renodx-dlss5.addon64
+            dist/endfield-candidate/renodx-mfgunlock.addon64
+          if-no-files-found: error
+          retention-days: 14
