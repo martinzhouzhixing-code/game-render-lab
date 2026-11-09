@@ -41,10 +41,10 @@ if ($env:VSCMD_ARG_TGT_ARCH -and $env:VSCMD_ARG_TGT_ARCH -ne 'x64') {
     throw 'Start the x64 Visual Studio Developer PowerShell.'
 }
 
-$cl = (Get-Command cl.exe -CommandType Application).Source
-$rc = (Get-Command rc.exe -CommandType Application).Source
-$dumpbin = (Get-Command dumpbin.exe -CommandType Application).Source
-$python = (Get-Command python.exe -CommandType Application).Source
+$cl = (Get-Command cl.exe -CommandType Application | Select-Object -First 1).Source
+$rc = (Get-Command rc.exe -CommandType Application | Select-Object -First 1).Source
+$dumpbin = (Get-Command dumpbin.exe -CommandType Application | Select-Object -First 1).Source
+$python = (Get-Command python.exe -CommandType Application | Select-Object -First 1).Source
 Invoke-Checked $python @('-B', (Join-Path $PSScriptRoot 'stage_dependencies.py'), $DependencyDirectory)
 New-Item -ItemType Directory -Path $intermediate, $OutputDirectory -Force | Out-Null
 
@@ -147,7 +147,7 @@ foreach ($binary in @($genericBinary, $mfgBinary)) {
     Copy-Item -LiteralPath $binary -Destination $published -Force
     $hashes[$name] = (Get-FileHash -LiteralPath $published -Algorithm SHA256).Hash.ToLowerInvariant()
 }
-$git = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue
+$git = Get-Command git.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 $revision = $null
 if ($git -and (Test-Path -LiteralPath (Join-Path $repository '.git'))) {
     $revision = & $git.Source -C $repository rev-parse HEAD
