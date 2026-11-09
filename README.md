@@ -10,7 +10,7 @@
 
 ## 安装
 
-下载 GitHub Releases 中的 Windows 安装器。打开后选择「查找终末地」，确认安装路径，再选择「安装」。ReShade 的 Vulkan 层由官方安装程序注册，Windows 可能显示一次管理员确认。游戏关闭时执行安装，启动器使用默认 Vulkan 模式。
+从 [GitHub Releases](https://github.com/martinzhouzhixing-code/game-render-lab/releases) 下载 Windows 安装器。它打开后会自动查找《终末地》。确认安装路径后点击「一键安装」。ReShade 的 Vulkan 层由官方安装程序注册，Windows 可能显示一次管理员确认。游戏关闭时执行安装，启动器使用默认 Vulkan 模式。
 
 首版针对配备 RTX 50 系列及受支持 NVIDIA 驱动的 Windows x64。启动后的 NR 依赖游戏本身输出 DLSS 超分画面。安装器保留现有游戏画质。游戏的超分选项已设为 DLSS 时，重启后即可从 Home 打开面板。
 
